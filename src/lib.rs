@@ -83,4 +83,23 @@ pub mod cipher {
             plain_text
         }
     }
+
+#[cfg(test)]
+    #[test]
+    // tests to see if basic substitution cipher enciphers the alphabet to the cipher key
+    fn test_encipher() {
+        let cipher = "DEFGHIJKLMNOPQRSTUVWXYZABC".to_owned();
+        let caesar = CipherWheel::new(cipher.clone());
+        let enciphered = caesar.encipher("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+        assert_eq!(cipher, enciphered);
+    }
+
+    #[test]
+    // tests to see if basic substition cipher deciphers the cipher key to the alphabet
+    fn test_decipher() {
+        let cipher = "DEFGHIJKLMNOPQRSTUVWXYZABC".to_owned();
+        let caesar = CipherWheel::new(cipher.clone());
+        let deciphered = caesar.decipher(&cipher);
+        assert_eq!("ABCDEFGHIJKLMNOPQRSTUVWXYZ".to_owned(), deciphered);
+    }
 }

@@ -6,6 +6,8 @@ pub mod enigma {
         fn rotate(&mut self) -> bool;
         fn set_rotor_position(&mut self, rotor_position: u16);
         fn set_triggers(&mut self, triggers: Vec<u16>);
+        fn right_to_left(&self, position: u16) -> u16;
+        fn left_to_right(&self, position: u16) -> u16;
     }
 
     /* An EnigmaWheel is a representation of a rotating offset substitution cipher. It contains the following:
@@ -141,7 +143,7 @@ pub mod enigma {
            output: none
            limitations: none obvious at this time
            algorithm: sets the specified rotor position mod 26 */
-           fn set_rotor_position(&mut self, rotor_position: u16) {
+        fn set_rotor_position(&mut self, rotor_position: u16) {
                 self.rotor_position = rotor_position.checked_rem(26).unwrap();
         }
 
@@ -150,8 +152,34 @@ pub mod enigma {
            output: none
            limitations: none obvious at this time
            algorithm: sets the list of trigger points to the supplied list of trigger points */
-           fn set_triggers(&mut self, triggers: Vec<u16>) {
+        fn set_triggers(&mut self, triggers: Vec<u16>) {
                 self.triggers = triggers;
+        }
+
+        /* function: set_rotor_position
+           input: u16 representing the current rotor position mod 26
+           output: none
+           limitations: none obvious at this time
+           algorithm: sets the specified rotor position mod 26 */
+        fn right_to_left(&self, position: u16) -> u16 {
+            let index: u16 = (position + self.rotor_position - 1).checked_rem(26).unwrap();
+            // println!("{0} {1} {2}", position, self.rotor_position, position + self.rotor_position -1);
+            let chr: char = self.cipher.chars().nth(index as usize).unwrap();
+            // print!("{}", chr);
+            (26 - self.rotor_position + (chr as u16 - 64)).checked_rem(26).unwrap()
+        }
+
+        /* function: set_rotor_position
+           input: u16 representing the current rotor position mod 26
+           output: none
+           limitations: none obvious at this time
+           algorithm: sets the specified rotor position mod 26 */
+        fn left_to_right(&self, position: u16) -> u16 {
+            let index: u16 = (position + self.rotor_position).checked_rem(26).unwrap();
+            // println!("{0} {1} {2}", position, self.rotor_position, index);
+            let decoded = self.cipher.find(char::from_u32(index as u32 + 64).unwrap()).unwrap() as u16;
+            // print!("{}", char::from_u32(index as u32 + 64).unwrap());
+            (26 - self.rotor_position + (decoded + 1)).checked_rem(26).unwrap()
         }
     }
 
@@ -280,5 +308,44 @@ pub mod enigma {
             i += 1;
             assert_eq!(i.checked_rem(7).unwrap() == 6, prop);
         }
+ 
+    }
+
+    #[test]
+    //
+    fn test_full_decryption() {
+        let enigma_plugboard = EnigmaWheel::new("ABCDEFGHIJKLMNOPQRSTUVWXYZ".to_owned(), 0, 0);
+        let mut enigma_wheel_i = EnigmaWheel::new("EKMFLGDQVZNTOWYHXUSPAIBRCJ".to_owned(), 12, 0);
+        let mut enigma_wheel_ii = EnigmaWheel::new("AJDKSIRUXBLHWTMCQGZNPYFVOE".to_owned(), 2, 0);
+        let mut enigma_wheel_iii = EnigmaWheel::new("BDFHJLCPRTXVZNYEIWGAKMUSQO".to_owned(), 10, 0);
+        let enigma_reflector = EnigmaWheel::new("YRUHQSLDPXNGOKMIEBFZCWVJAT".to_owned(), 0, 0);
+        enigma_wheel_i.set_triggers(vec![17]);
+        enigma_wheel_ii.set_triggers(vec![5]);
+        enigma_wheel_iii.set_triggers(vec![22]);
+
+        let message: String = "QMJIDOMZWZJFJR".to_owned();
+        let mut enciphered: String = String::new();
+
+        for chr in message.chars() {
+            let code: u16 = (chr as u16) - 64;
+            let pos = &enigma_plugboard.right_to_left(code);
+            if enigma_wheel_iii.rotate() {
+                if enigma_wheel_ii.rotate() {
+                    enigma_wheel_i.rotate();
+                }
+            }
+            let pos = &enigma_wheel_iii.right_to_left(*pos);
+            let pos = &enigma_wheel_ii.right_to_left(*pos);
+            let pos = &enigma_wheel_i.right_to_left(*pos);
+            let pos = &enigma_reflector.right_to_left(*pos);
+            let pos = &enigma_wheel_i.left_to_right(*pos);
+            let pos = &enigma_wheel_ii.left_to_right(*pos);
+            let pos = &enigma_wheel_iii.left_to_right(*pos);
+
+            enciphered.push(char::from_u32(*pos as u32 + 64).unwrap());
+        }
+
+        println!("{}", enciphered);
+        assert_eq!("ENIGMAREVEALED", enciphered);
     }
 }

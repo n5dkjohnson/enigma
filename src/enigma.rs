@@ -4,8 +4,10 @@ pub mod enigma {
     // The Enigma Trait provides methods for rotating the offset, and propogating rotating the offset 
     pub trait Enigma {
         fn rotate(&mut self) -> bool;
-        fn set_rotor_position(self, rotor_position: u16);
-        fn set_triggers(self, triggers: Vec<u16>);
+        fn set_rotor_position(&mut self, rotor_position: u16);
+        fn set_triggers(&mut self, triggers: Vec<u16>);
+        fn right_to_left(&self, position: u16) -> u16;
+        fn left_to_right(&self, position: u16) -> u16;
     }
 
     /* An EnigmaWheel is a representation of a rotating offset substitution cipher. It contains the following:
@@ -15,14 +17,14 @@ pub mod enigma {
          A u16 called ring_setting that represents the number of characters an output char is shifter after enciphering
           Shifts move forward in the aplhabet (e.g.: A shifts by 2 to A), and are stored mod 26
        An EnigmaWheel has the following functions available to it:
-         new is a constructor that returns a new CipherWheel object given a cipher String, and offset i8 as above
+         new is a constructor that returns a new EnigmaWheel object given a cipher String, and offset i8 as above
          encipher is a function that returns an enciphered String given a plaintext String using the encipherment provided in the 
             cipher variable
          decipher is a function that returns a plaintext String given an enciphered String using the encipherment provided in the
             cipher variable
          rotate is a function that increments the offset by one mod 26. This rotation is propagated to successive wheels if necessary
        EnigmaWheel implements the traits Cipher and Enigma
-       Further work: To properly achieve the desired functionality of implementing an Enigma machine, the CipherWheel object needs to be extended to have an offset, a way to increment the offset, and a way to pass to subsequent wheels a signal to increment when necessary. To continue to function as a reflector and a plugboard, it also needs to ignore increment instruction and to pass on increment instructions. */
+       Further work: To properly achieve the desired functionality of implementing an Enigma machine, the EnigmaWheel object needs to be extended to have an offset, a way to increment the offset, and a way to pass to subsequent wheels a signal to increment when necessary. To continue to function as a reflector and a plugboard, it also needs to ignore increment instruction and to pass on increment instructions. */
     pub struct EnigmaWheel {
         cipher: String,
         rotor_position: u16,
@@ -30,15 +32,15 @@ pub mod enigma {
         triggers: Vec<u16>
     }
 
-    /* The new method for CipherWheel allows us to create a CipherWheel without exposing the cipher to users. After initial creation
-       the CipherWheel object only allows encipher and decipher operations. NOTE: These methods probably allow deduction of the underlying cipher. If keeping the cipher private is desired, the encipher and decipher methods should not be exposed for
+    /* The new method for EnigmaWheel allows us to create a EnigmaWheel without exposing the cipher to users. After initial creation
+       the EnigmaWheel object only allows encipher and decipher operations. NOTE: These methods probably allow deduction of the underlying cipher. If keeping the cipher private is desired, the encipher and decipher methods should not be exposed for
        unrestricted use. */
     impl EnigmaWheel {
         /* function: new
            inputs: String representing the enciphered alphabet
                    u16 representing the shift applied to the original letter before ciphering
                    u16 representing the shift applied to the enciphered letter
-           output: CipherWheel object containing the specified cipher and encipher and decipher methods for its use
+           output: EnigmaWheel object containing the specified cipher and encipher and decipher methods for its use
            limitations: The cipher cannot be changed once it is initially set */
         pub fn new(new_cipher: String, new_offset: u16, new_setting: u16) -> EnigmaWheel {
             EnigmaWheel{
@@ -50,7 +52,7 @@ pub mod enigma {
         }
     }
 
-    /* The implementation of the Cipher trait for a CipherWheel object */
+    /* The implementation of the Cipher trait for a EnigmaWheel object */
     impl Cipher for EnigmaWheel {
         /* function: encipher
            input: String containing the Message to be enciphered
@@ -65,9 +67,7 @@ pub mod enigma {
                     // take the ascii code for the letter in the plaintext, subtract 65 to obtain a zero-based index
                     code = code.checked_sub(65).unwrap();
                     // then add the offset to the index mod 26 to obtain shifted index of source character
-                    println!("code before adjustment: {0} {1}", code, self.rotor_position);
                     code = code.checked_add(26-self.rotor_position).unwrap().checked_rem(26).unwrap();
-                    println!("code after adjustment: {}", code);
                     // return the letter corresponding to that index from the cipher
                     let mut enciphered_code = self.cipher.chars().nth((code) as usize).unwrap() as u16;
                     // shift the letter obtained by the ring setting, adjusting to keep in range
@@ -118,7 +118,13 @@ pub mod enigma {
         }
     }
 
+    // The implementation of the Enigma Trait for an EnigmaWheel object
     impl Enigma for EnigmaWheel {
+        /* function: rotate
+           input: none
+           output: bool indicating whether the next wheel in the sequence should be rotated as well
+           limitations: none obvious at this time
+           algorithm: increments the rotor position mod 26, then checks to see if any of the triggers for rotating the next wheel were hit */
         fn rotate(&mut self) -> bool {
             let mut result = false;
             self.rotor_position += 1;
@@ -132,12 +138,48 @@ pub mod enigma {
             result
         }
 
-        fn set_rotor_position(mut self, rotor_position: u16) {
-            self.rotor_position = rotor_position;
+        /* function: set_rotor_position
+           input: u16 representing the current rotor position mod 26
+           output: none
+           limitations: none obvious at this time
+           algorithm: sets the specified rotor position mod 26 */
+        fn set_rotor_position(&mut self, rotor_position: u16) {
+                self.rotor_position = rotor_position.checked_rem(26).unwrap();
         }
 
-        fn set_triggers(mut self, triggers: Vec<u16>) {
-            self.triggers = triggers;
+        /* function: set_triggers
+           input: Vector of u16s representing the positions which trigger the next wheel to rotate
+           output: none
+           limitations: none obvious at this time
+           algorithm: sets the list of trigger points to the supplied list of trigger points */
+        fn set_triggers(&mut self, triggers: Vec<u16>) {
+                self.triggers = triggers;
+        }
+
+        /* function: set_rotor_position
+           input: u16 representing the current rotor position mod 26
+           output: none
+           limitations: none obvious at this time
+           algorithm: sets the specified rotor position mod 26 */
+        fn right_to_left(&self, position: u16) -> u16 {
+            let index: u16 = (position + self.rotor_position - 1).checked_rem(26).unwrap();
+            // println!("{0} {1} {2}", position, self.rotor_position, position + self.rotor_position -1);
+            let chr: char = self.cipher.chars().nth(index as usize).unwrap();
+            // print!("{}", chr);
+            (26 - self.rotor_position + (chr as u16 - 64)).checked_rem(26).unwrap()
+        }
+
+        /* function: set_rotor_position
+           input: u16 representing the current rotor position mod 26
+           output: none
+           limitations: none obvious at this time
+           algorithm: sets the specified rotor position mod 26 */
+        fn left_to_right(&self, position: u16) -> u16 {
+            let index: u16 = (position + self.rotor_position).checked_rem(26).unwrap();
+            // println!("{0} {1} {2}", position, self.rotor_position, index);
+            let decoded = self.cipher.find(char::from_u32(index as u32 + 64).unwrap()).unwrap() as u16;
+            // print!("{}", char::from_u32(index as u32 + 64).unwrap());
+            (26 - self.rotor_position + (decoded + 1)).checked_rem(26).unwrap()
         }
     }
 
@@ -146,8 +188,8 @@ pub mod enigma {
     // tests to see if basic substitution cipher enciphers the alphabet to the cipher key
     fn test_encipher() {
         let cipher = "DEFGHIJKLMNOPQRSTUVWXYZABC".to_owned();
-        let caesar = EnigmaWheel::new(cipher.clone(), 0, 0);
-        let enciphered = caesar.encipher("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+        let enigma = EnigmaWheel::new(cipher.clone(), 0, 0);
+        let enciphered = enigma.encipher("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
         assert_eq!(cipher, enciphered);
     }
 
@@ -155,8 +197,8 @@ pub mod enigma {
     // tests to see if basic substition cipher deciphers the cipher key to the alphabet
     fn test_decipher() {
         let cipher = "DEFGHIJKLMNOPQRSTUVWXYZABC".to_owned();
-        let caesar = EnigmaWheel::new(cipher.clone(), 0, 0);
-        let deciphered = caesar.decipher(&cipher);
+        let enigma = EnigmaWheel::new(cipher.clone(), 0, 0);
+        let deciphered = enigma.decipher(&cipher);
         assert_eq!("ABCDEFGHIJKLMNOPQRSTUVWXYZ".to_owned(), deciphered);
     }
 
@@ -164,8 +206,8 @@ pub mod enigma {
     // tests to see if basic substitution cipher with offset enciphers the alphabet to the cipher key
     fn test_encipher_with_shift() {
         let cipher = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".to_owned();
-        let caesar = EnigmaWheel::new(cipher.clone(), 23, 0);
-        let enciphered = caesar.encipher("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+        let enigma = EnigmaWheel::new(cipher.clone(), 23, 0);
+        let enciphered = enigma.encipher("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
         assert_eq!("DEFGHIJKLMNOPQRSTUVWXYZABC".to_owned(), enciphered);
     }
 
@@ -173,41 +215,41 @@ pub mod enigma {
     // tests to see if basic substition cipher with offset deciphers the cipher key to the alphabet
     fn test_decipher_with_shift() {
         let cipher = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".to_owned();
-        let caesar = EnigmaWheel::new(cipher.clone(), 23, 0);
-        let deciphered = caesar.decipher("DEFGHIJKLMNOPQRSTUVWXYZABC");
+        let enigma = EnigmaWheel::new(cipher.clone(), 23, 0);
+        let deciphered = enigma.decipher("DEFGHIJKLMNOPQRSTUVWXYZABC");
         assert_eq!("ABCDEFGHIJKLMNOPQRSTUVWXYZ".to_owned(), deciphered);
     }
 
     #[test]
-    //
+    // Tests to see if basic substitution cipher with rotating offset enciphers the alphabet to a repeating character string
     fn test_encipher_with_rotating_shift() {
         let cipher = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".to_owned();
-        let mut caesar = EnigmaWheel::new(cipher.clone(), 23, 0);
+        let mut enigma = EnigmaWheel::new(cipher.clone(), 23, 0);
         let mut enciphered: String = String::new();
         for i in "ABCDEFGHIJKLMNOPQRSTUVWXYZ".chars() {
             let i_str = &format!("{}", i);
-            caesar.rotate();
-            enciphered.push(caesar.encipher(i_str).chars().next().unwrap());
+            enigma.rotate();
+            enciphered.push(enigma.encipher(i_str).chars().next().unwrap());
         };
         assert_eq!("CCCCCCCCCCCCCCCCCCCCCCCCCC".to_owned(), enciphered);
     }
 
     #[test]
-    //
+    // Tests to see if basic substitution cipher with rotating offset deciphers a repeating character string to the alphabet
     fn test_decipher_with_rotating_shift() {
         let cipher = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".to_owned();
-        let mut caesar = EnigmaWheel::new(cipher.clone(), 23, 0);
+        let mut enigma = EnigmaWheel::new(cipher.clone(), 23, 0);
         let mut enciphered: String = String::new();
         for i in "CCCCCCCCCCCCCCCCCCCCCCCCCC".chars() {
             let i_str = &format!("{}", i);
-            caesar.rotate();
-            enciphered.push(caesar.decipher(i_str).chars().next().unwrap());
+            enigma.rotate();
+            enciphered.push(enigma.decipher(i_str).chars().next().unwrap());
         };
         assert_eq!("ABCDEFGHIJKLMNOPQRSTUVWXYZ".to_owned(), enciphered);
     }
 
     #[test]
-    //
+    // Tests to see if basic substitution cipher with offset and ring setting enciphers the alphabet to a known character string
     fn test_encipher_with_shift_and_ring_setting() {
         let cipher = "EKMFLGDQVZNTOWYHXUSPAIBRCJ".to_owned();
         let mut enigma = EnigmaWheel::new(cipher.clone(), 0, 1);
@@ -217,7 +259,7 @@ pub mod enigma {
     }
 
     #[test]
-    //
+    // Tests to see if basic substitution cipher with offset and ring setting deciphers a known character string to the alphabet
     fn test_decipher_with_shift_and_ring_setting() {
         let cipher = "EKMFLGDQVZNTOWYHXUSPAIBRCJ".to_owned();
         let mut enigma = EnigmaWheel::new(cipher.clone(), 0, 1);
@@ -227,30 +269,83 @@ pub mod enigma {
     }
 
     #[test]
-    //
+    // Tests to see if basic substitution cipher with rotating offset and ring setting enciphers the alphabet to a repeating character string
     fn test_encipher_with_rotating_shift_and_ring_setting() {
         let cipher = "EKMFLGDQVZNTOWYHXUSPAIBRCJ".to_owned();
-        let mut caesar = EnigmaWheel::new(cipher.clone(), 0, 2);
+        let mut enigma = EnigmaWheel::new(cipher.clone(), 0, 2);
         let mut enciphered: String = String::new();
         for i in "ABCDEFGHIJKLMNOPQRSTUVWXYZ".chars() {
             let i_str = &format!("{}", i);
-            caesar.rotate();
-            enciphered.push(caesar.encipher(i_str).chars().next().unwrap());
+            enigma.rotate();
+            enciphered.push(enigma.encipher(i_str).chars().next().unwrap());
         };
         assert_eq!("LLLLLLLLLLLLLLLLLLLLLLLLLL".to_owned(), enciphered);
     }
 
     #[test]
-    //
+    // Tests to see if basic substitution cipher with rotating offset and ring settting deciphers a repeating character string to the alphabet
     fn test_decipher_with_rotating_shift_and_ring_setting() {
         let cipher = "EKMFLGDQVZNTOWYHXUSPAIBRCJ".to_owned();
-        let mut caesar = EnigmaWheel::new(cipher.clone(), 0, 2);
+        let mut enigma = EnigmaWheel::new(cipher.clone(), 0, 2);
         let mut enciphered: String = String::new();
         for i in "LLLLLLLLLLLLLLLLLLLLLLLLLL".chars() {
             let i_str = &format!("{}", i);
-            caesar.rotate();
-            enciphered.push(caesar.decipher(i_str).chars().next().unwrap());
+            enigma.rotate();
+            enciphered.push(enigma.decipher(i_str).chars().next().unwrap());
         };
         assert_eq!("ABCDEFGHIJKLMNOPQRSTUVWXYZ".to_owned(), enciphered);
+    }
+
+    #[test]
+    // Tests to see if the EnigmaWheels rotation properly triggers the rotation of the subsequent wheel
+    fn test_rotate_propagation() {
+        let cipher = "EKMFLGDQVZNTOWYHXUSPAIBRCJ".to_owned();
+        let mut enigma = EnigmaWheel::new(cipher.clone(), 0, 2);
+        enigma.set_triggers(vec![6, 13, 20]);
+        let mut i: u16 = 0;
+        while i<26 {
+            let prop: bool = enigma.rotate();
+            i += 1;
+            assert_eq!(i.checked_rem(7).unwrap() == 6, prop);
+        }
+ 
+    }
+
+    #[test]
+    //
+    fn test_full_decryption() {
+        let enigma_plugboard = EnigmaWheel::new("ABCDEFGHIJKLMNOPQRSTUVWXYZ".to_owned(), 0, 0);
+        let mut enigma_wheel_i = EnigmaWheel::new("EKMFLGDQVZNTOWYHXUSPAIBRCJ".to_owned(), 12, 0);
+        let mut enigma_wheel_ii = EnigmaWheel::new("AJDKSIRUXBLHWTMCQGZNPYFVOE".to_owned(), 2, 0);
+        let mut enigma_wheel_iii = EnigmaWheel::new("BDFHJLCPRTXVZNYEIWGAKMUSQO".to_owned(), 10, 0);
+        let enigma_reflector = EnigmaWheel::new("YRUHQSLDPXNGOKMIEBFZCWVJAT".to_owned(), 0, 0);
+        enigma_wheel_i.set_triggers(vec![17]);
+        enigma_wheel_ii.set_triggers(vec![5]);
+        enigma_wheel_iii.set_triggers(vec![22]);
+
+        let message: String = "QMJIDOMZWZJFJR".to_owned();
+        let mut enciphered: String = String::new();
+
+        for chr in message.chars() {
+            let code: u16 = (chr as u16) - 64;
+            let pos = &enigma_plugboard.right_to_left(code);
+            if enigma_wheel_iii.rotate() {
+                if enigma_wheel_ii.rotate() {
+                    enigma_wheel_i.rotate();
+                }
+            }
+            let pos = &enigma_wheel_iii.right_to_left(*pos);
+            let pos = &enigma_wheel_ii.right_to_left(*pos);
+            let pos = &enigma_wheel_i.right_to_left(*pos);
+            let pos = &enigma_reflector.right_to_left(*pos);
+            let pos = &enigma_wheel_i.left_to_right(*pos);
+            let pos = &enigma_wheel_ii.left_to_right(*pos);
+            let pos = &enigma_wheel_iii.left_to_right(*pos);
+
+            enciphered.push(char::from_u32(*pos as u32 + 64).unwrap());
+        }
+
+        println!("{}", enciphered);
+        assert_eq!("ENIGMAREVEALED", enciphered);
     }
 }

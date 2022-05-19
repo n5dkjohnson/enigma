@@ -167,24 +167,32 @@ pub mod enigma_wheel {
            limitations: none obvious at this time
            algorithm: traces the input through the wheel wiring to the output accounting for start position */
         fn right_to_left(&self, position: u16) -> u16 {
-            let index: u16 = (position + self.rotor_position - 1).checked_rem(26).unwrap();
+            let index: u16 = (position.checked_add(self.rotor_position).unwrap().checked_add(25).unwrap()).checked_rem(26).unwrap();
             // println!("{0} {1} {2}", position, self.rotor_position, position + self.rotor_position -1);
             let chr: char = self.cipher.chars().nth(index as usize).unwrap();
             // print!("{}", chr);
             (26 - self.rotor_position + (chr as u16 - 64)).checked_rem(26).unwrap()
         }
 
-        /* function: right_to_left
+        /* function: left_to_right
            input: u16 representing the index of the input
            output: u16 representing the index of the output
            limitations: none obvious at this time
            algorithm: traces the input through the wheel wiring to the output accounting for start position */
         fn left_to_right(&self, position: u16) -> u16 {
-            let index: u16 = (position + self.rotor_position).checked_rem(26).unwrap();
+            let mut index: u16 = (position.checked_add(self.rotor_position).unwrap()).checked_rem(26).unwrap();
             // println!("{0} {1} {2}", position, self.rotor_position, index);
+            if index == 0 {
+                index = 26;
+            }
             let decoded = self.cipher.find(char::from_u32(index as u32 + 64).unwrap()).unwrap() as u16;
             // print!("{}", char::from_u32(index as u32 + 64).unwrap());
-            (26 - self.rotor_position + (decoded + 1)).checked_rem(26).unwrap()
+            let mut fin_pos: u16 = (26 - self.rotor_position + (decoded + 1)).checked_rem(26).unwrap();
+            if fin_pos == 0 {
+                fin_pos = 26u16;
+            }
+
+            fin_pos
         }
     }
 
@@ -356,7 +364,15 @@ pub mod enigma_machine {
     }
 
     impl EnigmaMachine {
-        pub fn new(pb_cipher: String, 
+        /* function: new
+           inputs: String representing the wiring of the plugboard
+                   String, u16, u16  representing the wiring, offset and ring setting of the rightmost rotor
+                   String, u16, u16  representing the wiring, offset and ring setting of the middle rotor
+                   String, u16, u16  representing the wiring, offset and ring setting of the leftmost rotor
+                   String representing the wiring of the reflector
+           output: EnigmaMachine object containing the plugboard, rotors and reflector specified as above
+           limitations: The ciphers cannot be changed once it is initially set */
+           pub fn new(pb_cipher: String, 
                rw_cipher: String, rw_offset: u16, rw_setting: u16,
                mw_cipher: String, mw_offset: u16, mw_setting: u16,
                lw_cipher: String, lw_offset: u16, lw_setting: u16,
@@ -371,13 +387,30 @@ pub mod enigma_machine {
                 }
             }
         
-        pub fn set_triggers(&mut self, rw_triggers: Vec<u16>, mw_triggers: Vec<u16>, lw_triggers: Vec<u16>) {
-            self.right_wheel.set_triggers(rw_triggers);
-            self.middle_wheel.set_triggers(mw_triggers);
-            self.left_wheel.set_triggers(lw_triggers);
-        }
-
-        pub fn transform_message(&mut self, message: String) -> String{
+        /*  function: set_triggers
+            inputs: Vec<u16>s representing the turnover positions of the rightmost, middle and leftmost rotors respectively
+            output: none
+            limitations: None obvious as this time */
+            pub fn set_triggers(&mut self, rw_triggers: Vec<u16>, mw_triggers: Vec<u16>, lw_triggers: Vec<u16>) {
+                self.right_wheel.set_triggers(rw_triggers);
+                self.middle_wheel.set_triggers(mw_triggers);
+                self.left_wheel.set_triggers(lw_triggers);
+            }
+    
+        /*  function: set_rotor_positions
+            inputs: u16s representing the initial positions of the rightmost, middle and leftmost rotors respectively
+            output: none
+            limitations: None obvious as this time */
+            pub fn set_rotor_positions(&mut self, rw_position: u16, mw_position: u16, lw_position: u16) {
+                self.right_wheel.set_rotor_position(rw_position);
+                self.middle_wheel.set_rotor_position(mw_position);
+                self.left_wheel.set_rotor_position(lw_position);
+            }
+        /*  function: transform_message
+            inputs: A String containing the message to be transformed, either by encoding or decoding 
+            output: A string containing the message after encoding or decoding
+            limitations: None obvious as this time */
+            pub fn transform_message(&mut self, message: String) -> String{
             let mut enciphered: String = String::new();
 
             for chr in message.chars() {
@@ -389,6 +422,7 @@ pub mod enigma_machine {
                             self.left_wheel.rotate();
                         }
                     }
+                    let pos = &self.plugboard.right_to_left(*pos);
                     let pos = &self.right_wheel.right_to_left(*pos);
                     let pos = &self.middle_wheel.right_to_left(*pos);
                     let pos = &self.left_wheel.right_to_left(*pos);
@@ -396,6 +430,7 @@ pub mod enigma_machine {
                     let pos = &self.left_wheel.left_to_right(*pos);
                     let pos = &self.middle_wheel.left_to_right(*pos);
                     let pos = &self.right_wheel.left_to_right(*pos);
+                    let pos = &self.plugboard.left_to_right(*pos);
         
                     enciphered.push(char::from_u32(*pos as u32 + 64).unwrap());
                 } else {

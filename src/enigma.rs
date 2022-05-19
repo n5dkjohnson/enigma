@@ -1,4 +1,4 @@
-pub mod enigma {
+pub mod enigma_wheel {
     use enigma::lib::Cipher;
 
     // The Enigma Trait provides methods for rotating the offset, and propogating rotating the offset 
@@ -17,14 +17,19 @@ pub mod enigma {
          A u16 called ring_setting that represents the number of characters an output char is shifter after enciphering
           Shifts move forward in the aplhabet (e.g.: A shifts by 2 to A), and are stored mod 26
        An EnigmaWheel has the following functions available to it:
-         new is a constructor that returns a new EnigmaWheel object given a cipher String, and offset i8 as above
+         new is a constructor that returns a new EnigmaWheel object given a cipher String, offset u16 and setting u16 as above
          encipher is a function that returns an enciphered String given a plaintext String using the encipherment provided in the 
             cipher variable
          decipher is a function that returns a plaintext String given an enciphered String using the encipherment provided in the
             cipher variable
          rotate is a function that increments the offset by one mod 26. This rotation is propagated to successive wheels if necessary
-       EnigmaWheel implements the traits Cipher and Enigma
-       Further work: To properly achieve the desired functionality of implementing an Enigma machine, the EnigmaWheel object needs to be extended to have an offset, a way to increment the offset, and a way to pass to subsequent wheels a signal to increment when necessary. To continue to function as a reflector and a plugboard, it also needs to ignore increment instruction and to pass on increment instructions. */
+         set_rotor_position is a function the sets or resets the initial position of the rotor
+         set_triggers is a function that sets the turnover points of the rotor
+         right_to_left takes the position of an input signal on the right side of the rotor and returns the position of the output
+            signal on the left hand side of the rotor
+         left_to_right takes the position of an input signal on the left side of the rotor and returns the position of the output 
+            signal on the right hand side of the rotor
+       EnigmaWheel implements the traits Cipher and Enigma */
     pub struct EnigmaWheel {
         cipher: String,
         rotor_position: u16,
@@ -156,11 +161,11 @@ pub mod enigma {
                 self.triggers = triggers;
         }
 
-        /* function: set_rotor_position
-           input: u16 representing the current rotor position mod 26
-           output: none
+        /* function: right_to_left
+           input: u16 representing the index of the input
+           output: u16 representing the index of the output
            limitations: none obvious at this time
-           algorithm: sets the specified rotor position mod 26 */
+           algorithm: traces the input through the wheel wiring to the output accounting for start position */
         fn right_to_left(&self, position: u16) -> u16 {
             let index: u16 = (position + self.rotor_position - 1).checked_rem(26).unwrap();
             // println!("{0} {1} {2}", position, self.rotor_position, position + self.rotor_position -1);
@@ -169,11 +174,11 @@ pub mod enigma {
             (26 - self.rotor_position + (chr as u16 - 64)).checked_rem(26).unwrap()
         }
 
-        /* function: set_rotor_position
-           input: u16 representing the current rotor position mod 26
-           output: none
+        /* function: right_to_left
+           input: u16 representing the index of the input
+           output: u16 representing the index of the output
            limitations: none obvious at this time
-           algorithm: sets the specified rotor position mod 26 */
+           algorithm: traces the input through the wheel wiring to the output accounting for start position */
         fn left_to_right(&self, position: u16) -> u16 {
             let index: u16 = (position + self.rotor_position).checked_rem(26).unwrap();
             // println!("{0} {1} {2}", position, self.rotor_position, index);
@@ -312,40 +317,107 @@ pub mod enigma {
     }
 
     #[test]
-    //
-    fn test_full_decryption() {
-        let enigma_plugboard = EnigmaWheel::new("ABCDEFGHIJKLMNOPQRSTUVWXYZ".to_owned(), 0, 0);
-        let mut enigma_wheel_i = EnigmaWheel::new("EKMFLGDQVZNTOWYHXUSPAIBRCJ".to_owned(), 12, 0);
-        let mut enigma_wheel_ii = EnigmaWheel::new("AJDKSIRUXBLHWTMCQGZNPYFVOE".to_owned(), 2, 0);
-        let mut enigma_wheel_iii = EnigmaWheel::new("BDFHJLCPRTXVZNYEIWGAKMUSQO".to_owned(), 10, 0);
-        let enigma_reflector = EnigmaWheel::new("YRUHQSLDPXNGOKMIEBFZCWVJAT".to_owned(), 0, 0);
-        enigma_wheel_i.set_triggers(vec![17]);
-        enigma_wheel_ii.set_triggers(vec![5]);
-        enigma_wheel_iii.set_triggers(vec![22]);
+    // Tests to see if the EnigmaWheel properly transforms position in the right-to-left direction
+    fn test_right_to_left() {
+        let wheel = EnigmaWheel::new("EKMFLGDQVZNTOWYHXUSPAIBRCJ".to_owned(), 0, 0);
+        let new_pos = wheel.right_to_left(12);
+        assert_eq!(20, new_pos);
+    }
 
-        let message: String = "QMJIDOMZWZJFJR".to_owned();
-        let mut enciphered: String = String::new();
+    #[test]
+    // Tests to see if the EnigmaWheel properly transforms position in the left-to-right direction
+    fn test_lett_to_right() {
+        let wheel = EnigmaWheel::new("EKMFLGDQVZNTOWYHXUSPAIBRCJ".to_owned(), 0, 0);
+        let new_pos = wheel.left_to_right(20);
+        assert_eq!(12, new_pos);
+    }
+}
 
-        for chr in message.chars() {
-            let code: u16 = (chr as u16) - 64;
-            let pos = &enigma_plugboard.right_to_left(code);
-            if enigma_wheel_iii.rotate() {
-                if enigma_wheel_ii.rotate() {
-                    enigma_wheel_i.rotate();
+pub mod enigma_machine {
+    use crate::enigma::enigma_wheel::EnigmaWheel;
+    use crate::enigma::enigma_wheel::Enigma;
+
+    /* An EnigmaStructure is a representation of a complete Enigma machine. It contains the following:
+         An EnigmaWheel representing the plugboard
+         An EnigmaWheel representing the rightmost Enigma wheel
+         An EnigmaWheel representing the middle Enigma wheel
+         An EnigmaWheel representing the leftmost Enigma wheel
+         An EnigmaWheel representing the reflector
+       An EnigmaWheel has the following functions available to it:
+         new is a constructor that returns a new EnigmaMachine object given the components' ciphers String, offsets u16 and settings u16 as above
+         set_triggers is a function that sets the rotating trigger points of the three wheels given their triggers Vec<u16>
+         transform is a function that returns a plaintext String given an enciphered String or an enciphered String given a plaintext String using the setting provided for the EnigmaMachine */
+    pub struct EnigmaMachine {
+        plugboard: EnigmaWheel,
+        right_wheel: EnigmaWheel,
+        middle_wheel: EnigmaWheel,
+        left_wheel: EnigmaWheel,
+        reflector: EnigmaWheel
+    }
+
+    impl EnigmaMachine {
+        pub fn new(pb_cipher: String, 
+               rw_cipher: String, rw_offset: u16, rw_setting: u16,
+               mw_cipher: String, mw_offset: u16, mw_setting: u16,
+               lw_cipher: String, lw_offset: u16, lw_setting: u16,
+               rf_cipher: String
+            ) -> EnigmaMachine {
+                EnigmaMachine {
+                    plugboard: EnigmaWheel::new(pb_cipher, 0, 0),
+                    right_wheel: EnigmaWheel::new(rw_cipher, rw_offset, rw_setting),
+                    middle_wheel: EnigmaWheel::new(mw_cipher, mw_offset, mw_setting),
+                    left_wheel: EnigmaWheel::new(lw_cipher, lw_offset, lw_setting),
+                    reflector: EnigmaWheel::new(rf_cipher, 0, 0)
                 }
             }
-            let pos = &enigma_wheel_iii.right_to_left(*pos);
-            let pos = &enigma_wheel_ii.right_to_left(*pos);
-            let pos = &enigma_wheel_i.right_to_left(*pos);
-            let pos = &enigma_reflector.right_to_left(*pos);
-            let pos = &enigma_wheel_i.left_to_right(*pos);
-            let pos = &enigma_wheel_ii.left_to_right(*pos);
-            let pos = &enigma_wheel_iii.left_to_right(*pos);
-
-            enciphered.push(char::from_u32(*pos as u32 + 64).unwrap());
+        
+        pub fn set_triggers(&mut self, rw_triggers: Vec<u16>, mw_triggers: Vec<u16>, lw_triggers: Vec<u16>) {
+            self.right_wheel.set_triggers(rw_triggers);
+            self.middle_wheel.set_triggers(mw_triggers);
+            self.left_wheel.set_triggers(lw_triggers);
         }
 
-        println!("{}", enciphered);
-        assert_eq!("ENIGMAREVEALED", enciphered);
+        pub fn transform_message(&mut self, message: String) -> String{
+            let mut enciphered: String = String::new();
+
+            for chr in message.chars() {
+                if chr > '@' && chr < '[' {
+                    let code: u16 = (chr as u16) - 64;
+                    let pos = &self.plugboard.right_to_left(code);
+                    if self.right_wheel.rotate() {
+                        if self.middle_wheel.rotate() {
+                            self.left_wheel.rotate();
+                        }
+                    }
+                    let pos = &self.right_wheel.right_to_left(*pos);
+                    let pos = &self.middle_wheel.right_to_left(*pos);
+                    let pos = &self.left_wheel.right_to_left(*pos);
+                    let pos = &self.reflector.right_to_left(*pos);
+                    let pos = &self.left_wheel.left_to_right(*pos);
+                    let pos = &self.middle_wheel.left_to_right(*pos);
+                    let pos = &self.right_wheel.left_to_right(*pos);
+        
+                    enciphered.push(char::from_u32(*pos as u32 + 64).unwrap());
+                } else {
+                    enciphered.push(chr);
+                }
+            }
+        
+            enciphered
+        }
+    }
+
+    #[test]
+    // This deciphers a known message with known machine settings to ensure the EnigmaMachine is working properlsy
+    fn test_full_machine() {
+        let mut my_enigma = EnigmaMachine::new("ABCDEFGHIJKLMNOPQRSTUVWXYZ".to_owned(),
+        "BDFHJLCPRTXVZNYEIWGAKMUSQO".to_owned(), 10, 0,
+        "AJDKSIRUXBLHWTMCQGZNPYFVOE".to_owned(), 2, 0,
+        "EKMFLGDQVZNTOWYHXUSPAIBRCJ".to_owned(), 12, 0,
+        "YRUHQSLDPXNGOKMIEBFZCWVJAT".to_owned()
+    );
+    my_enigma.set_triggers(vec![22], vec![5], vec![17]);
+    let transformed:String = my_enigma.transform_message("QMJIDO MZWZJFJR".to_owned());
+    assert_eq!("ENIGMA REVEALED", transformed);
     }
 }

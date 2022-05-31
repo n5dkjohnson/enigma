@@ -1,7 +1,8 @@
 pub mod enigma_wheel {
     use enigma::lib::Cipher;
 
-    // The Enigma Trait provides methods for rotating the offset, and propogating rotating the offset 
+    // The Enigma Trait provides methods for rotating the offset, propogating the rotation as necessary; setting the rotor position;
+    // setting the trigger points which cause the next wheel to rotate; and simulating the path through the rotor in both the left-to-right and right-to-left directions 
     pub trait Enigma {
         fn rotate(&mut self) -> bool;
         fn set_rotor_position(&mut self, rotor_position: u16);
@@ -46,7 +47,7 @@ pub mod enigma_wheel {
                    u16 representing the shift applied to the original letter before ciphering
                    u16 representing the shift applied to the enciphered letter
            output: EnigmaWheel object containing the specified cipher and encipher and decipher methods for its use
-           limitations: The cipher cannot be changed once it is initially set */
+           limitations: The cipher and ring settings cannot be changed once they are initially set */
         pub fn new(new_cipher: String, new_offset: u16, new_setting: u16) -> EnigmaWheel {
             EnigmaWheel{
                 cipher: new_cipher, 
@@ -63,7 +64,7 @@ pub mod enigma_wheel {
            input: String containing the Message to be enciphered
            output: String containing the enciphered message
            limitations: encipher only performs its functions on UPPERCASE STRINGS
-           alogrithm: Each letter in the message is converted to an index representing its position in the alphabet, shited by the offset specified in the cipher, then the letter from cipher corresponding to that position is added to the encrypted String. Characters that are not uppercase Roman letters are not affected, and are retained in the output String unchanged. */
+           alogrithm: Each letter in the message is converted to an index representing its position in the alphabet, shited by the offset specified in the cipher, then the letter from cipher corresponding to that position is added to the encrypted String. Characters that are not uppercase Roman letters are not affected, and are retained in the output String unchanged. This has the effect of treating the specified cipher as a simple letter substitution cipher. */
         fn encipher(&self, message: &str) -> String {
             let mut enciphered_text: String = String::new();
 
@@ -96,7 +97,7 @@ pub mod enigma_wheel {
            limitations: decipher only performs its functions on UPPERCASE STRINGS
            alogrithm: Each letter in the message is lloked up in the cipher to determine its position, then the letter
            from the alphabet corresponding to that position is added to the decrypted String. Characters that are not 
-           uppercase Roman letters are not affected, and are retained in the output String unchanged. */
+           uppercase Roman letters are not affected, and are retained in the output String unchanged. This treats the cipher as a simple letter substitution cipher. */
         fn decipher(&self, message: &str) ->String {
             let mut plain_text: String = String::new();
 
@@ -165,12 +166,10 @@ pub mod enigma_wheel {
            input: u16 representing the index of the input
            output: u16 representing the index of the output
            limitations: none obvious at this time
-           algorithm: traces the input through the wheel wiring to the output accounting for start position */
+           algorithm: traces the input through the wheel wiring to the output accounting for start position. While this has the final effect of a letter substitution cipher, that cipher is not obvious from the arrangements of the letters on the opposing sides of the rotor. Instead, the relative difference in the positions of the letter corresponding to the input position and the same letter's position on the output side determine the change in offset of the letter passing through the rotor. */
         fn right_to_left(&self, position: u16) -> u16 {
-            let index: u16 = (position.checked_add(self.rotor_position).unwrap().checked_add(25).unwrap()).checked_rem(26).unwrap();
-            // println!("{0} {1} {2}", position, self.rotor_position, position + self.rotor_position -1);
+            let index: u16 = (position.checked_add(25).unwrap().checked_add(26 +  self.rotor_position - self.ring_setting).unwrap()).checked_rem(26).unwrap();
             let chr: char = self.cipher.chars().nth(index as usize).unwrap();
-            // print!("{}", chr);
             (26 - self.rotor_position + (chr as u16 - 64)).checked_rem(26).unwrap()
         }
 
@@ -178,16 +177,14 @@ pub mod enigma_wheel {
            input: u16 representing the index of the input
            output: u16 representing the index of the output
            limitations: none obvious at this time
-           algorithm: traces the input through the wheel wiring to the output accounting for start position */
+           algorithm: traces the input through the wheel wiring to the output accounting for start position. While this has the final effect of a letter substitution cipher, that cipher is not obvious from the arrangements of the letters on the opposing sides of the rotor. Instead, the relative difference in the positions of the letter corresponding to the input position and the same letter's position on the output side determine the change in offset of the letter passing through the rotor. */
         fn left_to_right(&self, position: u16) -> u16 {
             let mut index: u16 = (position.checked_add(self.rotor_position).unwrap()).checked_rem(26).unwrap();
-            // println!("{0} {1} {2}", position, self.rotor_position, index);
             if index == 0 {
                 index = 26;
             }
             let decoded = self.cipher.find(char::from_u32(index as u32 + 64).unwrap()).unwrap() as u16;
-            // print!("{}", char::from_u32(index as u32 + 64).unwrap());
-            let mut fin_pos: u16 = (26 - self.rotor_position + (decoded + 1)).checked_rem(26).unwrap();
+            let mut fin_pos: u16 = (26 - self.rotor_position + self.ring_setting + (decoded + 1)).checked_rem(26).unwrap();
             if fin_pos == 0 {
                 fin_pos = 26u16;
             }

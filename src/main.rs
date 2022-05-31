@@ -3,7 +3,6 @@ mod lib;
 use crate::enigma::enigma_machine::EnigmaMachine;
 
 // TODO: Find some test material with plugboards, double-stepping and ring settings
-// TODO: Make sure all comments are complete and accurate
 
 fn main() {
     let mut my_enigma = EnigmaMachine::new(

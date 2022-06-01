@@ -168,7 +168,7 @@ pub mod enigma_wheel {
            limitations: none obvious at this time
            algorithm: traces the input through the wheel wiring to the output accounting for start position. While this has the final effect of a letter substitution cipher, that cipher is not obvious from the arrangements of the letters on the opposing sides of the rotor. Instead, the relative difference in the positions of the letter corresponding to the input position and the same letter's position on the output side determine the change in offset of the letter passing through the rotor. */
         fn right_to_left(&self, position: u16) -> u16 {
-            let index: u16 = (position.checked_add(25).unwrap().checked_add(26 +  self.rotor_position - self.ring_setting).unwrap()).checked_rem(26).unwrap();
+            let index: u16 = (position.checked_add(25 +  self.rotor_position - self.ring_setting).unwrap()).checked_rem(26).unwrap();
             let chr: char = self.cipher.chars().nth(index as usize).unwrap();
             (26 - self.rotor_position + (chr as u16 - 64)).checked_rem(26).unwrap()
         }
@@ -412,14 +412,13 @@ pub mod enigma_machine {
 
             for chr in message.chars() {
                 if chr > '@' && chr < '[' {
-                    let code: u16 = (chr as u16) - 64;
-                    let pos = &self.plugboard.right_to_left(code);
                     if self.right_wheel.rotate() {
                         if self.middle_wheel.rotate() {
                             self.left_wheel.rotate();
                         }
                     }
-                    let pos = &self.plugboard.right_to_left(*pos);
+                    let code: u16 = (chr as u16) - 64;
+                    let pos = &self.plugboard.right_to_left(code);
                     let pos = &self.right_wheel.right_to_left(*pos);
                     let pos = &self.middle_wheel.right_to_left(*pos);
                     let pos = &self.left_wheel.right_to_left(*pos);
